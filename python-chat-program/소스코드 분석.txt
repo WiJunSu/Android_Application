@@ -1,0 +1,129 @@
+코드 및 주석
+
+#!/usr/bin/python3 // python3로 실행하기 위하여
+import socket // 소켓 API
+import select // select()를 사용할 수 있게 하는 모듈
+import sys 
+// 파이썬에서 기본적으로 제공하는 모듈(인터프리터와 관련된 다양한 정보, 제어방법 제공)
+import time // sleep()을 사용할 수 있게 하는 모듈
+
+host = '203.250.133.88' 
+port = 16332 // well-known 이라 불리는 지정된 포트 번호 지정
+BUFSIZ = 1024  // 수신할 데이터의 최대 사이즈 지정
+BACKLOG = 5 // 대기열의 크기 지정(listen큐에 들어올 수 있는 대기열의 수)
+connections = {}
+// {client_sock: User} key : client_sock, value : User, item= key : value
+
+// 접속한 사용자의 ip와 닉네임을 저장하는 클래스를 정의
+class User:
+    def __init__(self, ip):
+        self.ip = ip
+        self.name = None
+
+// 클라이언트에게 메시지 출력
+def broadcast(msg, nickname=""):
+    // 닉네임이 없을 경우 닉네임을 Server로 지정
+    if not nickname:
+        nickname = "Server"
+    // dictionary dict.keys(), dict.values(), dict.items(): default is keys()
+    for sock, user in connections.items():
+        message = nickname + ': ' + msg.decode()
+        if user.name is not None:
+            sock.sendall(message.encode())
+    return
+
+
+conn_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) // TCP 연결
+conn_sock.bind((host, port)) // 소켓에 주소 할당
+conn_sock.listen(BACKLOG) // 대기열을 BACKLOG=5만큼 지정
+
+//표준 입력(sys.stdin)과 클라이언트 접속을 기다리는 서버 소켓(conn_sock)을 rlist에 추가
+rlist = [sys.stdin, conn_sock]
+while True:
+    print("Waiting for messages...")
+
+    // select는 rlist에 지정한 소켓이나 표준 입력에 신호가 올 때까지 기다리다가 신호가 	오면, 신호가 온 소켓 또는 표준 입력이 리턴되고 readable에 저장
+    readable, writable, exceptional = select.select(rlist, [], rlist)
+
+    // 신호가 온 소켓에 대해 for loop 실행
+    for sock in readable:
+        if sock is sys.stdin:
+            // 만약 sock이 sys.stdin이라면 사용자가 키보드로 명령을 입력한 것
+            cmd = input()
+            if cmd == 'quit':
+                // 입력한 문자열이 quit이라면 서버에 Bye!출력 후 프로그램을 종료
+                print('Bye!') 
+                sys.exit(0) 
+            elif cmd == 'user':
+                // 입력한 문자열이 user라면 닉네임, ip 출력
+                for user in connections.values():
+                    print('%s -> %s' % (user.name, user.ip))
+
+        elif sock is conn_sock:
+            // sock이 conn_sock라면, 새로운 클라이언트로부터 접속 요청이 온 것
+            data_sock, client_addr = conn_sock.accept()  // 클라이언트 접속을 수락
+            // data_sock은 새로 접속한 사용자와 통신하기 위한 socket instance가 저장
+            // client_addr에는 IP 등의 정보가 저장
+            rlist.append(data_sock)  
+	    // data_sock을 rlist에 추가하여 select.select에서 해당 소켓에 대해 신호가                   오는지 체크할 수 있도록 함
+            print("Client from {} has connected...".format(client_addr[0]))
+	    // 접속한 클라이언트의 ip를 출력
+
+            // 채팅방에 있는 사용자 닉네임들을 합쳐서 문자열로 만듬
+            joined_users = ''
+            // 접속한 사용자들에 대해 루프
+            for user in connections.values():
+                if user.name is not None:  
+		// 사용자 nickname이 None 이면 nickname을 입력하기 전이라 스킵
+                    if len(joined_users) > 0:  
+	        // 첫번째로 닉네임을 추가할 때는 , 를 추가하지 않음
+                        joined_users += ', '
+                    joined_users += user.name
+
+            // 새로 접속한 사용자에게 채팅방에 있는 사용자 닉네임을 보냄
+            if len(joined_users) > 0:  // 이미 접속해 있는 사용자가 있을 경우만 보냄
+                message = "Users %s are in chatroom.\n" % joined_users
+                data_sock.send(message.encode())
+                time.sleep(2)  
+		// 아래 보내는 메시지와 한 통으로 가는 것을 방지하기 위해 sleep시킴
+
+            data_sock.send("Hi there, Please send me your nickname@@".encode())
+            new_user = User(client_addr[0])  // 새로운 사용자 정보 생성
+            connections[data_sock] = new_user  
+	    // 접속해 있는 사용자 목록에 새로 추가된 사용자 추가
+        else:
+            // 위 두가지 경우가 아니면, 채팅방에 접속해 있는 사용자로부터 새로운 메시		지가 온 것
+            message = sock.recv(BUFSIZ)  // 메시지 수신
+
+            user = connections.get(sock)  // 메시지를 보낸 user 정보를 가져옴
+            print('message from %s -> %s' % (user.name, message.decode()))
+            if user.name is None:  // 새로 접속한 사용자가 닉네임을 보낸 경우
+                name = message.decode()
+                welcome = "Welcome {}. if want to quit, send me 						'Bye!'".format(name)
+                sock.send(welcome.encode())
+
+                message = "{} has joined...".format(name)
+                broadcast(message.encode())
+
+                // 사용자가 보낸 닉네임을 user 정보에 기록
+                user.name = name
+            else:
+                // user.name이 None이 아닌 경우는 사용자가 채팅 메시지를 보낸 경우
+                if message.decode() == "Bye!":  
+		// 보낸 메시지가 Bye!라면 해당 사용자와의 접속을 종료
+                    sock.close()
+                    rlist.remove(sock)
+                    del connections[sock]
+                    broadcast("{} has left...".format(user.name).encode())
+                    break
+                else:  
+		// Bye!가 아닌 경우 채팅 메시지를 접속해 있는 사용자들에게 모두 보냄
+                    broadcast(message, user.name)
+
+
+
+
+
+
+
+
