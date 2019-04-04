@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#f4e359</color>
+    <color name="colorPrimaryDark">#FFFFFF</color>
+    <color name="colorAccent">#ffef72</color>
+    <color name="colorWarning">#fc5555</color>
+    <color name="colorGray">#a19b9b</color>
+    <color name="colortitle">#f7f2ca</color>
+    <color name="moreYellow">#d4bb2f</color>
+    <color name="primarysub">#f1bd15</color>
+    <color name="warm">#7c1b1b</color>
+    <color name="pre">#eca8a8</color>
+    <color name="gal">#200707</color>
+    <color name="gals">#1a1225</color>
+</resources>
